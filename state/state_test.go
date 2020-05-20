@@ -142,7 +142,10 @@ func TestABCIResponsesSaveLoad2(t *testing.T) {
 			},
 			types.ABCIResults{
 				{Code: 383, Data: nil},
-				{Code: 0, Data: []byte("Gotcha!")},
+				{Code: 0, Data: []byte("Gotcha!"), Events: []abci.Event{
+					{Type: "type1", Attributes: []abci.EventAttribute{{Key: []byte("a"), Value: []byte("1")}}},
+					{Type: "type2", Attributes: []abci.EventAttribute{{Key: []byte("build"), Value: []byte("stuff")}}},
+				}},
 			}},
 		3: {
 			nil,
@@ -161,8 +164,9 @@ func TestABCIResponsesSaveLoad2(t *testing.T) {
 	for i, tc := range cases {
 		h := int64(i + 1) // last block height, one below what we save
 		responses := &sm.ABCIResponses{
+			BeginBlock: &abci.ResponseBeginBlock{Events: nil},
 			DeliverTxs: tc.added,
-			EndBlock:   &abci.ResponseEndBlock{},
+			EndBlock:   &abci.ResponseEndBlock{Events: nil},
 		}
 		sm.SaveABCIResponses(stateDB, h, responses)
 	}
