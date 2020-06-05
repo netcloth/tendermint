@@ -11,6 +11,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/merkle"
 	tmmath "github.com/tendermint/tendermint/libs/math"
+	tmproto "github.com/tendermint/tendermint/proto/types"
 )
 
 const (
@@ -78,6 +79,24 @@ func NewValidatorSet(valz []*Validator) *ValidatorSet {
 	return vals
 }
 
+func (vals *ValidatorSet) ValidateBasic() error {
+	if vals.IsNilOrEmpty() {
+		return errors.New("validator set is nil or empty")
+	}
+
+	for idx, val := range vals.Validators {
+		if err := val.ValidateBasic(); err != nil {
+			return fmt.Errorf("invalid validator #%d: %w", idx, err)
+		}
+	}
+
+	if err := vals.Proposer.ValidateBasic(); err != nil {
+		return fmt.Errorf("proposer failed validate basic, error: %w", err)
+	}
+
+	return nil
+}
+
 // IsNilOrEmpty returns true if validator set is nil or empty.
 func (vals *ValidatorSet) IsNilOrEmpty() bool {
 	return vals == nil || len(vals.Validators) == 0
@@ -85,7 +104,7 @@ func (vals *ValidatorSet) IsNilOrEmpty() bool {
 
 // CopyIncrementProposerPriority increments ProposerPriority and updates the
 // proposer on a copy, and returns it.
-func (vals *ValidatorSet) CopyIncrementProposerPriority(times int) *ValidatorSet {
+func (vals *ValidatorSet) CopyIncrementProposerPriority(times int32) *ValidatorSet {
 	copy := vals.Copy()
 	copy.IncrementProposerPriority(times)
 	return copy
@@ -94,7 +113,7 @@ func (vals *ValidatorSet) CopyIncrementProposerPriority(times int) *ValidatorSet
 // IncrementProposerPriority increments ProposerPriority of each validator and
 // updates the proposer. Panics if validator set is empty.
 // `times` must be positive.
-func (vals *ValidatorSet) IncrementProposerPriority(times int) {
+func (vals *ValidatorSet) IncrementProposerPriority(times int32) {
 	if vals.IsNilOrEmpty() {
 		panic("empty validator set")
 	}
@@ -111,7 +130,7 @@ func (vals *ValidatorSet) IncrementProposerPriority(times int) {
 
 	var proposer *Validator
 	// Call IncrementProposerPriority(1) times times.
-	for i := 0; i < times; i++ {
+	for i := int32(0); i < times; i++ {
 		proposer = vals.incrementProposerPriority()
 	}
 
@@ -248,10 +267,10 @@ func (vals *ValidatorSet) HasAddress(address []byte) bool {
 
 // GetByAddress returns an index of the validator with address and validator
 // itself (copy) if found. Otherwise, -1 and nil are returned.
-func (vals *ValidatorSet) GetByAddress(address []byte) (index int, val *Validator) {
+func (vals *ValidatorSet) GetByAddress(address []byte) (index int32, val *Validator) {
 	for idx, val := range vals.Validators {
 		if bytes.Equal(val.Address, address) {
-			return idx, val.Copy()
+			return int32(idx), val.Copy()
 		}
 	}
 	return -1, nil
@@ -261,8 +280,8 @@ func (vals *ValidatorSet) GetByAddress(address []byte) (index int, val *Validato
 // index.
 // It returns nil values if index is less than 0 or greater or equal to
 // len(ValidatorSet.Validators).
-func (vals *ValidatorSet) GetByIndex(index int) (address []byte, val *Validator) {
-	if index < 0 || index >= len(vals.Validators) {
+func (vals *ValidatorSet) GetByIndex(index int32) (address []byte, val *Validator) {
+	if index < 0 || int(index) >= len(vals.Validators) {
 		return nil, nil
 	}
 	val = vals.Validators[index]
@@ -672,7 +691,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 		val := vals.Validators[idx]
 
 		// Validate signature.
-		voteSignBytes := commit.VoteSignBytes(chainID, idx)
+		voteSignBytes := commit.VoteSignBytes(chainID, int32(idx))
 		if !val.PubKey.VerifyBytes(voteSignBytes, commitSig.Signature) {
 			return fmt.Errorf("wrong signature (#%d): %X", idx, commitSig.Signature)
 		}
@@ -709,7 +728,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 // old vals to sign the future commit at H, that way we preserve the property
 // that if they weren't being truthful about the validator set at H (block hash
 // -> vals hash) or about the app state (block hash -> app hash) we can slash
-// > 2/3.  Otherwise, the lite client isn't providing the same security
+// > 2/3.  Otherwise, the light client isn't providing the same security
 // guarantees.
 //
 // Even if we added a slashing condition that if you sign a block header with
@@ -736,7 +755,7 @@ func (vals *ValidatorSet) VerifyFutureCommit(newSet *ValidatorSet, chainID strin
 
 	// Check old voting power.
 	oldVotingPower := int64(0)
-	seen := map[int]bool{}
+	seen := map[int32]bool{}
 
 	for idx, commitSig := range commit.Signatures {
 		if commitSig.Absent() {
@@ -751,7 +770,7 @@ func (vals *ValidatorSet) VerifyFutureCommit(newSet *ValidatorSet, chainID strin
 		seen[oldIdx] = true
 
 		// Validate signature.
-		voteSignBytes := commit.VoteSignBytes(chainID, idx)
+		voteSignBytes := commit.VoteSignBytes(chainID, int32(idx))
 		if !val.PubKey.VerifyBytes(voteSignBytes, commitSig.Signature) {
 			return fmt.Errorf("wrong signature (#%d): %X", idx, commitSig.Signature)
 		}
@@ -784,7 +803,7 @@ func (vals *ValidatorSet) VerifyCommitTrusting(chainID string, commit *Commit, t
 
 	var (
 		talliedVotingPower int64
-		seenVals           = make(map[int]int, len(commit.Signatures)) // validator index -> commit index
+		seenVals           = make(map[int32]int, len(commit.Signatures)) // validator index -> commit index
 	)
 
 	// Safely calculate voting power needed.
@@ -812,7 +831,7 @@ func (vals *ValidatorSet) VerifyCommitTrusting(chainID string, commit *Commit, t
 			seenVals[valIdx] = idx
 
 			// Validate signature.
-			voteSignBytes := commit.VoteSignBytes(chainID, idx)
+			voteSignBytes := commit.VoteSignBytes(chainID, int32(idx))
 			if !val.PubKey.VerifyBytes(voteSignBytes, commitSig.Signature) {
 				return fmt.Errorf("wrong signature (#%d): %X", idx, commitSig.Signature)
 			}
@@ -913,6 +932,64 @@ func (valz ValidatorsByAddress) Less(i, j int) bool {
 
 func (valz ValidatorsByAddress) Swap(i, j int) {
 	valz[i], valz[j] = valz[j], valz[i]
+}
+
+// ToProto converts ValidatorSet to protobuf
+func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
+	if vals == nil {
+		return nil, errors.New("nil validator set") // validator set should never be nil
+	}
+	vp := new(tmproto.ValidatorSet)
+	valsProto := make([]*tmproto.Validator, len(vals.Validators))
+	for i := 0; i < len(vals.Validators); i++ {
+		valp, err := vals.Validators[i].ToProto()
+		if err != nil {
+			return nil, err
+		}
+		valsProto[i] = valp
+	}
+	vp.Validators = valsProto
+
+	valProposer, err := vals.Proposer.ToProto()
+	if err != nil {
+		return nil, fmt.Errorf("toProto: validatorSet proposer error: %w", err)
+	}
+	vp.Proposer = valProposer
+
+	vp.TotalVotingPower = vals.totalVotingPower
+
+	return vp, nil
+}
+
+// ValidatorSetFromProto sets a protobuf ValidatorSet to the given pointer.
+// It returns an error if any of the validators from the set or the proposer
+// is invalid
+func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
+	if vp == nil {
+		return nil, errors.New("nil validator set") // validator set should never be nil, bigger issues are at play if empty
+	}
+	vals := new(ValidatorSet)
+
+	valsProto := make([]*Validator, len(vp.Validators))
+	for i := 0; i < len(vp.Validators); i++ {
+		v, err := ValidatorFromProto(vp.Validators[i])
+		if err != nil {
+			return nil, err
+		}
+		valsProto[i] = v
+	}
+	vals.Validators = valsProto
+
+	p, err := ValidatorFromProto(vp.GetProposer())
+	if err != nil {
+		return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+	}
+
+	vals.Proposer = p
+
+	vals.totalVotingPower = vp.GetTotalVotingPower()
+
+	return vals, nil
 }
 
 //----------------------------------------

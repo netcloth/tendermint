@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmproto "github.com/tendermint/tendermint/proto/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
@@ -32,7 +33,7 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.EqualValues(t, vset, vset.Copy())
 	assert.False(t, vset.HasAddress([]byte("some val")))
 	idx, val := vset.GetByAddress([]byte("some val"))
-	assert.Equal(t, -1, idx)
+	assert.EqualValues(t, -1, idx)
 	assert.Nil(t, val)
 	addr, val := vset.GetByIndex(-100)
 	assert.Nil(t, addr)
@@ -54,7 +55,7 @@ func TestValidatorSetBasic(t *testing.T) {
 
 	assert.True(t, vset.HasAddress(val.Address))
 	idx, _ = vset.GetByAddress(val.Address)
-	assert.Equal(t, 0, idx)
+	assert.EqualValues(t, 0, idx)
 	addr, _ = vset.GetByIndex(0)
 	assert.Equal(t, []byte(val.Address), addr)
 	assert.Equal(t, 1, vset.Size())
@@ -74,6 +75,64 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.NoError(t, vset.UpdateWithChangeSet([]*Validator{val}))
 	_, val = vset.GetByAddress(val.Address)
 	assert.Equal(t, proposerPriority, val.ProposerPriority)
+
+}
+
+func TestValidatorSetValidateBasic(t *testing.T) {
+	val, _ := RandValidator(false, 1)
+	badVal := &Validator{}
+
+	testCases := []struct {
+		vals ValidatorSet
+		err  bool
+		msg  string
+	}{
+		{
+			vals: ValidatorSet{},
+			err:  true,
+			msg:  "validator set is nil or empty",
+		},
+		{
+			vals: ValidatorSet{
+				Validators: []*Validator{},
+			},
+			err: true,
+			msg: "validator set is nil or empty",
+		},
+		{
+			vals: ValidatorSet{
+				Validators: []*Validator{val},
+			},
+			err: true,
+			msg: "proposer failed validate basic, error: nil validator",
+		},
+		{
+			vals: ValidatorSet{
+				Validators: []*Validator{badVal},
+			},
+			err: true,
+			msg: "invalid validator #0: validator does not have a public key",
+		},
+		{
+			vals: ValidatorSet{
+				Validators: []*Validator{val},
+				Proposer:   val,
+			},
+			err: false,
+			msg: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		err := tc.vals.ValidateBasic()
+		if tc.err {
+			if assert.Error(t, err) {
+				assert.Equal(t, tc.msg, err.Error())
+			}
+		} else {
+			assert.NoError(t, err)
+		}
+	}
 
 }
 
@@ -257,7 +316,10 @@ func TestProposerSelection3(t *testing.T) {
 	// i for the loop
 	// j for the times
 	// we should go in order for ever, despite some IncrementProposerPriority with times > 1
-	var i, j int
+	var (
+		i int
+		j int32
+	)
 	for ; i < 10000; i++ {
 		got := vset.GetProposer().Address
 		expected := proposerOrder[j%4].Address
@@ -285,11 +347,11 @@ func TestProposerSelection3(t *testing.T) {
 		}
 
 		// times is usually 1
-		times := 1
+		times := int32(1)
 		mod := (tmrand.Int() % 5) + 1
 		if tmrand.Int()%mod > 0 {
 			// sometimes its up to 5
-			times = (tmrand.Int() % 4) + 1
+			times = (tmrand.Int31() % 4) + 1
 		}
 		vset.IncrementProposerPriority(times)
 
@@ -302,9 +364,9 @@ func newValidator(address []byte, power int64) *Validator {
 }
 
 func randPubKey() crypto.PubKey {
-	var pubKey [32]byte
-	copy(pubKey[:], tmrand.Bytes(32))
-	return ed25519.PubKeyEd25519(pubKey)
+	pubKey := make(ed25519.PubKey, ed25519.PubKeySize)
+	copy(pubKey, tmrand.Bytes(32))
+	return ed25519.PubKey(tmrand.Bytes(32))
 }
 
 func randValidator(totalVotingPower int64) *Validator {
@@ -397,7 +459,7 @@ func TestAveragingInIncrementProposerPriority(t *testing.T) {
 	// the expected ProposerPriority.
 	tcs := []struct {
 		vs    ValidatorSet
-		times int
+		times int32
 		avg   int64
 	}{
 		0: {ValidatorSet{
@@ -447,7 +509,7 @@ func TestAveragingInIncrementProposerPriorityWithVotingPower(t *testing.T) {
 	tcs := []struct {
 		vals                  *ValidatorSet
 		wantProposerPrioritys []int64
-		times                 int
+		times                 int32
 		wantProposer          *Validator
 	}{
 
@@ -602,7 +664,7 @@ func TestValidatorSetVerifyCommit(t *testing.T) {
 		Height:           height,
 		Round:            0,
 		Timestamp:        tmtime.Now(),
-		Type:             PrecommitType,
+		Type:             tmproto.PrecommitType,
 		BlockID:          blockID,
 	}
 	sig, err := privKey.Sign(vote.SignBytes(chainID))
@@ -1175,7 +1237,7 @@ func applyChangesToValSet(t *testing.T, expErr error, valSet *ValidatorSet, vals
 }
 
 func TestValSetUpdatePriorityOrderTests(t *testing.T) {
-	const nMaxElections = 5000
+	const nMaxElections int32 = 5000
 
 	testCases := []testVSetCfg{
 		0: { // remove high power validator, keep old equal lower power validators
@@ -1212,10 +1274,6 @@ func TestValSetUpdatePriorityOrderTests(t *testing.T) {
 		6: randTestVSetCfg(t, 100, 1000),
 
 		7: randTestVSetCfg(t, 1000, 1000),
-
-		8: randTestVSetCfg(t, 10000, 1000),
-
-		9: randTestVSetCfg(t, 1000, 10000),
 	}
 
 	for _, cfg := range testCases {
@@ -1229,24 +1287,24 @@ func TestValSetUpdatePriorityOrderTests(t *testing.T) {
 	}
 }
 
-func verifyValSetUpdatePriorityOrder(t *testing.T, valSet *ValidatorSet, cfg testVSetCfg, nMaxElections int) {
+func verifyValSetUpdatePriorityOrder(t *testing.T, valSet *ValidatorSet, cfg testVSetCfg, nMaxElections int32) {
 	// Run election up to nMaxElections times, sort validators by priorities
-	valSet.IncrementProposerPriority(tmrand.Int()%nMaxElections + 1)
-	origValsPriSorted := validatorListCopy(valSet.Validators)
-	sort.Sort(validatorsByPriority(origValsPriSorted))
+	valSet.IncrementProposerPriority(tmrand.Int31()%nMaxElections + 1)
 
 	// apply the changes, get the updated validators, sort by priorities
 	applyChangesToValSet(t, nil, valSet, cfg.addedVals, cfg.updatedVals, cfg.deletedVals)
-	updatedValsPriSorted := validatorListCopy(valSet.Validators)
-	sort.Sort(validatorsByPriority(updatedValsPriSorted))
 
 	// basic checks
 	assert.Equal(t, cfg.expectedVals, toTestValList(valSet.Validators))
 	verifyValidatorSet(t, valSet)
 
 	// verify that the added validators have the smallest priority:
-	//  - they should be at the beginning of valListNewPriority since it is sorted by priority
+	//  - they should be at the beginning of updatedValsPriSorted since it is
+	//  sorted by priority
 	if len(cfg.addedVals) > 0 {
+		updatedValsPriSorted := validatorListCopy(valSet.Validators)
+		sort.Sort(validatorsByPriority(updatedValsPriSorted))
+
 		addedValsPriSlice := updatedValsPriSorted[:len(cfg.addedVals)]
 		sort.Sort(ValidatorsByVotingPower(addedValsPriSlice))
 		assert.Equal(t, cfg.addedVals, toTestValList(addedValsPriSlice))
@@ -1333,7 +1391,7 @@ func TestValSetUpdateOverflowRelated(t *testing.T) {
 func TestVerifyCommitTrusting(t *testing.T) {
 	var (
 		blockID                       = makeBlockIDRandom()
-		voteSet, originalValset, vals = randVoteSet(1, 1, PrecommitType, 6, 1)
+		voteSet, originalValset, vals = randVoteSet(1, 1, tmproto.PrecommitType, 6, 1)
 		commit, err                   = MakeCommit(blockID, 1, 1, voteSet, vals, time.Now())
 		newValSet, _                  = RandValidatorSet(2, 1)
 	)
@@ -1374,7 +1432,7 @@ func TestVerifyCommitTrusting(t *testing.T) {
 func TestVerifyCommitTrustingErrorsOnOverflow(t *testing.T) {
 	var (
 		blockID               = makeBlockIDRandom()
-		voteSet, valSet, vals = randVoteSet(1, 1, PrecommitType, 1, MaxTotalVotingPower)
+		voteSet, valSet, vals = randVoteSet(1, 1, tmproto.PrecommitType, 1, MaxTotalVotingPower)
 		commit, err           = MakeCommit(blockID, 1, 1, voteSet, vals, time.Now())
 	)
 	require.NoError(t, err)
@@ -1409,6 +1467,48 @@ func TestSafeMul(t *testing.T) {
 		c, overflow := safeMul(tc.a, tc.b)
 		assert.Equal(t, tc.c, c, "#%d", i)
 		assert.Equal(t, tc.overflow, overflow, "#%d", i)
+	}
+}
+
+func TestValidatorSetProtoBuf(t *testing.T) {
+	valset, _ := RandValidatorSet(10, 100)
+	valset2, _ := RandValidatorSet(10, 100)
+	valset2.Validators[0] = &Validator{}
+
+	valset3, _ := RandValidatorSet(10, 100)
+	valset3.Proposer = nil
+
+	valset4, _ := RandValidatorSet(10, 100)
+	valset4.Proposer = &Validator{}
+
+	testCases := []struct {
+		msg      string
+		v1       *ValidatorSet
+		expPass1 bool
+		expPass2 bool
+	}{
+		{"success", valset, true, true},
+		{"fail valSet2, pubkey empty", valset2, false, false},
+		{"fail nil Proposer", valset3, false, false},
+		{"fail empty Proposer", valset4, false, false},
+		{"fail empty valSet", &ValidatorSet{}, false, false},
+		{"false nil", nil, false, false},
+	}
+	for _, tc := range testCases {
+		protoValSet, err := tc.v1.ToProto()
+		if tc.expPass1 {
+			require.NoError(t, err, tc.msg)
+		} else {
+			require.Error(t, err, tc.msg)
+		}
+
+		valSet, err := ValidatorSetFromProto(protoValSet)
+		if tc.expPass2 {
+			require.NoError(t, err, tc.msg)
+			require.EqualValues(t, tc.v1, valSet, tc.msg)
+		} else {
+			require.Error(t, err, tc.msg)
+		}
 	}
 }
 

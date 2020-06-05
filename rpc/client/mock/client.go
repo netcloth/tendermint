@@ -150,11 +150,15 @@ func (c Client) Block(height *int64) (*ctypes.ResultBlock, error) {
 	return core.Block(&rpctypes.Context{}, height)
 }
 
+func (c Client) BlockByHash(hash []byte) (*ctypes.ResultBlock, error) {
+	return core.BlockByHash(&rpctypes.Context{}, hash)
+}
+
 func (c Client) Commit(height *int64) (*ctypes.ResultCommit, error) {
 	return core.Commit(&rpctypes.Context{}, height)
 }
 
-func (c Client) Validators(height *int64, page, perPage int) (*ctypes.ResultValidators, error) {
+func (c Client) Validators(height *int64, page, perPage *int) (*ctypes.ResultValidators, error) {
 	return core.Validators(&rpctypes.Context{}, height, page, perPage)
 }
 

@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"sync"
 
-	db "github.com/tendermint/tm-db"
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/tendermint/tendermint/types"
@@ -81,7 +80,7 @@ func (bs *BlockStore) LoadBlock(height int64) *types.Block {
 
 	var block = new(types.Block)
 	buf := []byte{}
-	for i := 0; i < blockMeta.BlockID.PartsHeader.Total; i++ {
+	for i := 0; i < int(blockMeta.BlockID.PartsHeader.Total); i++ {
 		part := bs.LoadBlockPart(height, i)
 		buf = append(buf, part.Bytes...)
 	}
@@ -211,7 +210,7 @@ func (bs *BlockStore) PruneBlocks(height int64) (uint64, error) {
 	pruned := uint64(0)
 	batch := bs.db.NewBatch()
 	defer batch.Close()
-	flush := func(batch db.Batch, base int64) error {
+	flush := func(batch dbm.Batch, base int64) error {
 		// We can't trust batches to be atomic, so update base first to make sure noone
 		// tries to access missing blocks.
 		bs.mtx.Lock()
@@ -236,7 +235,7 @@ func (bs *BlockStore) PruneBlocks(height int64) (uint64, error) {
 		batch.Delete(calcBlockHashKey(meta.BlockID.Hash))
 		batch.Delete(calcBlockCommitKey(h))
 		batch.Delete(calcSeenCommitKey(h))
-		for p := 0; p < meta.BlockID.PartsHeader.Total; p++ {
+		for p := 0; p < int(meta.BlockID.PartsHeader.Total); p++ {
 			batch.Delete(calcBlockPartKey(h, p))
 		}
 		pruned++
@@ -277,7 +276,7 @@ func (bs *BlockStore) SaveBlock(block *types.Block, blockParts *types.PartSet, s
 		panic(fmt.Sprintf("BlockStore can only save contiguous blocks. Wanted %v, got %v", w, g))
 	}
 	if !blockParts.IsComplete() {
-		panic(fmt.Sprintf("BlockStore can only save complete block part sets"))
+		panic("BlockStore can only save complete block part sets")
 	}
 
 	// Save block meta
@@ -287,7 +286,7 @@ func (bs *BlockStore) SaveBlock(block *types.Block, blockParts *types.PartSet, s
 	bs.db.Set(calcBlockHashKey(hash), []byte(fmt.Sprintf("%d", height)))
 
 	// Save block parts
-	for i := 0; i < blockParts.Total(); i++ {
+	for i := 0; i < int(blockParts.Total()); i++ {
 		part := blockParts.GetPart(i)
 		bs.saveBlockPart(height, i, part)
 	}

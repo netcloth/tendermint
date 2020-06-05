@@ -92,27 +92,33 @@ type Environment struct {
 
 //----------------------------------------------
 
-func validatePage(page, perPage, totalCount int) (int, error) {
+func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 	if perPage < 1 {
 		panic(fmt.Sprintf("zero or negative perPage: %d", perPage))
 	}
 
-	if page == 0 {
-		return 1, nil // default
+	if pagePtr == nil { // no page parameter
+		return 1, nil
 	}
 
 	pages := ((totalCount - 1) / perPage) + 1
 	if pages == 0 {
 		pages = 1 // one page (even if it's empty)
 	}
-	if page < 0 || page > pages {
-		return 1, fmt.Errorf("page should be within [0, %d] range, given %d", pages, page)
+	page := *pagePtr
+	if page <= 0 || page > pages {
+		return 1, fmt.Errorf("page should be within [1, %d] range, given %d", pages, page)
 	}
 
 	return page, nil
 }
 
-func validatePerPage(perPage int) int {
+func validatePerPage(perPagePtr *int) int {
+	if perPagePtr == nil { // no per_page parameter
+		return defaultPerPage
+	}
+
+	perPage := *perPagePtr
 	if perPage < 1 {
 		return defaultPerPage
 	} else if perPage > maxPerPage {
@@ -128,4 +134,33 @@ func validateSkipCount(page, perPage int) int {
 	}
 
 	return skipCount
+}
+
+// latestHeight can be either latest committed or uncommitted (+1) height.
+func getHeight(latestHeight int64, heightPtr *int64) (int64, error) {
+	if heightPtr != nil {
+		height := *heightPtr
+		if height <= 0 {
+			return 0, fmt.Errorf("height must be greater than 0, but got %d", height)
+		}
+		if height > latestHeight {
+			return 0, fmt.Errorf("height %d must be less than or equal to the current blockchain height %d",
+				height, latestHeight)
+		}
+		base := env.BlockStore.Base()
+		if height < base {
+			return 0, fmt.Errorf("height %v is not available, blocks pruned at height %v",
+				height, base)
+		}
+		return height, nil
+	}
+	return latestHeight, nil
+}
+
+func latestUncommittedHeight() int64 {
+	nodeIsSyncing := env.ConsensusReactor.WaitSync()
+	if nodeIsSyncing {
+		return env.BlockStore.Height()
+	}
+	return env.BlockStore.Height() + 1
 }

@@ -17,7 +17,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/libs/rand"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	sm "github.com/tendermint/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -350,7 +349,7 @@ func genValSetWithPowers(powers []int64) *types.ValidatorSet {
 	for i := 0; i < size; i++ {
 		totalVotePower += powers[i]
 		val := types.NewValidator(ed25519.GenPrivKey().PubKey(), powers[i])
-		val.ProposerPriority = rand.Int64()
+		val.ProposerPriority = tmrand.Int64()
 		vals[i] = val
 	}
 	valSet := types.NewValidatorSet(vals)
@@ -376,7 +375,7 @@ func testProposerFreq(t *testing.T, caseNum int, valSet *types.ValidatorSet) {
 
 	// assert frequencies match expected (max off by 1)
 	for i, freq := range freqs {
-		_, val := valSet.GetByIndex(i)
+		_, val := valSet.GetByIndex(int32(i))
 		expectFreq := int(val.VotingPower) * runMult
 		gotFreq := freq
 		abs := int(math.Abs(float64(expectFreq - gotFreq)))

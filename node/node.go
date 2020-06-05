@@ -23,14 +23,13 @@ import (
 	bcv1 "github.com/tendermint/tendermint/blockchain/v1"
 	bcv2 "github.com/tendermint/tendermint/blockchain/v2"
 	cfg "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/consensus"
 	cs "github.com/tendermint/tendermint/consensus"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/evidence"
 	"github.com/tendermint/tendermint/libs/log"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
 	"github.com/tendermint/tendermint/libs/service"
-	lite "github.com/tendermint/tendermint/lite2"
+	"github.com/tendermint/tendermint/light"
 	mempl "github.com/tendermint/tendermint/mempool"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/p2p/pex"
@@ -392,7 +391,7 @@ func createConsensusReactor(config *cfg.Config,
 	csMetrics *cs.Metrics,
 	waitSync bool,
 	eventBus *types.EventBus,
-	consensusLogger log.Logger) (*consensus.Reactor, *consensus.State) {
+	consensusLogger log.Logger) (*cs.Reactor, *cs.State) {
 
 	consensusState := cs.NewState(
 		config.Consensus,
@@ -491,7 +490,7 @@ func createSwitch(config *cfg.Config,
 	mempoolReactor *mempl.Reactor,
 	bcReactor p2p.Reactor,
 	stateSyncReactor *statesync.Reactor,
-	consensusReactor *consensus.Reactor,
+	consensusReactor *cs.Reactor,
 	evidenceReactor *evidence.Reactor,
 	nodeInfo p2p.NodeInfo,
 	nodeKey *p2p.NodeKey,
@@ -566,7 +565,7 @@ func createPEXReactorAndAddToSwitch(addrBook pex.AddrBook, config *cfg.Config,
 }
 
 // startStateSync starts an asynchronous state sync process, then switches to fast sync mode.
-func startStateSync(ssR *statesync.Reactor, bcR fastSyncReactor, conR *consensus.Reactor,
+func startStateSync(ssR *statesync.Reactor, bcR fastSyncReactor, conR *cs.Reactor,
 	stateProvider statesync.StateProvider, config *cfg.StateSyncConfig, fastSync bool,
 	stateDB dbm.DB, blockStore *store.BlockStore) error {
 	ssR.Logger.Info("Starting state sync")
@@ -575,11 +574,11 @@ func startStateSync(ssR *statesync.Reactor, bcR fastSyncReactor, conR *consensus
 	if stateProvider == nil {
 		var err error
 		stateProvider, err = statesync.NewLightClientStateProvider(state.ChainID, state.Version,
-			config.RPCServers, lite.TrustOptions{
+			config.RPCServers, light.TrustOptions{
 				Period: config.TrustPeriod,
 				Height: config.TrustHeight,
 				Hash:   config.TrustHashBytes(),
-			}, ssR.Logger.With("module", "lite"))
+			}, ssR.Logger.With("module", "light"))
 		if err != nil {
 			return fmt.Errorf("failed to set up light client state provider: %w", err)
 		}
