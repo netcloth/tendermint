@@ -169,7 +169,8 @@ func makeHeaderPartsResponsesValPubKeyChange(
 
 	block := makeBlock(state, state.LastBlockHeight+1)
 	abciResponses := &sm.ABCIResponses{
-		EndBlock: &abci.ResponseEndBlock{ValidatorUpdates: nil},
+		BeginBlock: &abci.ResponseBeginBlock{},
+		EndBlock:   &abci.ResponseEndBlock{ValidatorUpdates: nil},
 	}
 
 	// If the pubkey is new, remove the old and add the new.
@@ -193,7 +194,8 @@ func makeHeaderPartsResponsesValPowerChange(
 
 	block := makeBlock(state, state.LastBlockHeight+1)
 	abciResponses := &sm.ABCIResponses{
-		EndBlock: &abci.ResponseEndBlock{ValidatorUpdates: nil},
+		BeginBlock: &abci.ResponseBeginBlock{},
+		EndBlock:   &abci.ResponseEndBlock{ValidatorUpdates: nil},
 	}
 
 	// If the pubkey is new, remove the old and add the new.
@@ -216,7 +218,8 @@ func makeHeaderPartsResponsesParams(
 
 	block := makeBlock(state, state.LastBlockHeight+1)
 	abciResponses := &sm.ABCIResponses{
-		EndBlock: &abci.ResponseEndBlock{ConsensusParamUpdates: types.TM2PB.ConsensusParams(&params)},
+		BeginBlock: &abci.ResponseBeginBlock{},
+		EndBlock:   &abci.ResponseEndBlock{ConsensusParamUpdates: types.TM2PB.ConsensusParams(&params)},
 	}
 	return block.Header, types.BlockID{Hash: block.Hash(), PartsHeader: types.PartSetHeader{}}, abciResponses
 }
