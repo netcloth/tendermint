@@ -128,17 +128,6 @@ func BootstrapState(db dbm.DB, state State) error {
 	return db.SetSync(stateKey, state.Bytes())
 }
 
-//------------------------------------------------------------------------
-
-// ABCIResponses retains the responses
-// of the various ABCI calls during block processing.
-// It is persisted to disk for each height before calling Commit.
-type ABCIResponses struct {
-	DeliverTxs []*abci.ResponseDeliverTx `json:"deliver_txs"`
-	EndBlock   *abci.ResponseEndBlock    `json:"end_block"`
-	BeginBlock *abci.ResponseBeginBlock  `json:"begin_block"`
-}
-
 // PruneStates deletes states between the given heights (including from, excluding to). It is not
 // guaranteed to delete all states, since the last checkpointed state and states being pointed to by
 // e.g. `LastHeightChanged` must remain. The state at to must also exist.
@@ -235,7 +224,17 @@ func PruneStates(db dbm.DB, from int64, to int64) error {
 	return nil
 }
 
-// NewABCIResponses returns a new ABCIResponses
+//------------------------------------------------------------------------
+
+// ABCIResponses retains the responses of the various ABCI calls during block
+// processing. It is persisted to disk for each height before calling Commit.
+type ABCIResponses struct {
+	BeginBlock *abci.ResponseBeginBlock  `json:"begin_block"`
+	DeliverTxs []*abci.ResponseDeliverTx `json:"deliver_txs"`
+	EndBlock   *abci.ResponseEndBlock    `json:"end_block"`
+}
+
+// NewABCIResponses returns a new ABCIResponses.
 func NewABCIResponses(block *types.Block) *ABCIResponses {
 	resDeliverTxs := make([]*abci.ResponseDeliverTx, len(block.Data.Txs))
 	if len(block.Data.Txs) == 0 {
@@ -243,7 +242,9 @@ func NewABCIResponses(block *types.Block) *ABCIResponses {
 		resDeliverTxs = nil
 	}
 	return &ABCIResponses{
+		BeginBlock: &abci.ResponseBeginBlock{},
 		DeliverTxs: resDeliverTxs,
+		EndBlock:   &abci.ResponseEndBlock{},
 	}
 }
 
@@ -252,6 +253,12 @@ func (arz *ABCIResponses) Bytes() []byte {
 	return cdc.MustMarshalBinaryBare(arz)
 }
 
+// ResultsHash returns the root hash of a Merkle tree with 3 leafs:
+//   1) amino encoded ResponseBeginBlock.Events
+//   2) root hash of a Merkle tree of ResponseDeliverTx responses (see ABCIResults.Hash)
+//   3) amino encoded ResponseEndBlock.Events
+//
+// See merkle.SimpleHashFromByteSlices
 func (arz *ABCIResponses) ResultsHash() []byte {
 	// Amino-encode BeginBlock events.
 	bbeBytes, err := cdc.MarshalBinaryLengthPrefixed(arz.BeginBlock.Events)
@@ -272,9 +279,12 @@ func (arz *ABCIResponses) ResultsHash() []byte {
 	return merkle.SimpleHashFromByteSlices([][]byte{bbeBytes, results.Hash(), ebeBytes})
 }
 
-// LoadABCIResponses loads the ABCIResponses for the given height from the database.
-// This is useful for recovering from crashes where we called app.Commit and before we called
-// s.Save(). It can also be used to produce Merkle proofs of the result of txs.
+// LoadABCIResponses loads the ABCIResponses for the given height from the
+// database. If not found, ErrNoABCIResponsesForHeight is returned.
+//
+// This is useful for recovering from crashes where we called app.Commit and
+// before we called s.Save(). It can also be used to produce Merkle proofs of
+// the result of txs.
 func LoadABCIResponses(db dbm.DB, height int64) (*ABCIResponses, error) {
 	buf, err := db.Get(calcABCIResponsesKey(height))
 	if err != nil {
