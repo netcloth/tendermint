@@ -271,7 +271,7 @@ func ABCIResponsesResultsHash(ar *tmstate.ABCIResponses) []byte {
 		panic(err)
 	}
 
-	// Build a Merkle tree of amino-encoded DeliverTx results and get a hash.
+	// Build a Merkle tree of proto-encoded DeliverTx results and get a hash.
 	results := types.NewResults(ar.DeliverTxs)
 
 	// proto-encode EndBlock events.
