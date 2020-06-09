@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/crypto/tmhash"
@@ -16,7 +18,6 @@ import (
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmproto "github.com/tendermint/tendermint/proto/types"
 	tmversion "github.com/tendermint/tendermint/proto/version"
-	"github.com/tendermint/tendermint/version"
 )
 
 const (
@@ -141,9 +142,11 @@ func (b *Block) MakePartSet(partSize uint32) *PartSet {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	// We prefix the byte length, so that unmarshaling
-	// can easily happen via a reader.
-	bz, err := cdc.MarshalBinaryLengthPrefixed(b)
+	pbb, err := b.ToProto()
+	if err != nil {
+		panic(err)
+	}
+	bz, err := proto.Marshal(pbb)
 	if err != nil {
 		panic(err)
 	}
@@ -333,10 +336,10 @@ func MaxDataBytesUnknownEvidence(maxBytes int64, valsCount int, maxNumEvidence u
 // - https://github.com/tendermint/spec/blob/master/spec/blockchain/blockchain.md
 type Header struct {
 	// basic block info
-	Version version.Consensus `json:"version"`
-	ChainID string            `json:"chain_id"`
-	Height  int64             `json:"height"`
-	Time    time.Time         `json:"time"`
+	Version tmversion.Consensus `json:"version"`
+	ChainID string              `json:"chain_id"`
+	Height  int64               `json:"height"`
+	Time    time.Time           `json:"time"`
 
 	// prev block info
 	LastBlockID BlockID `json:"last_block_id"`
@@ -361,7 +364,7 @@ type Header struct {
 // Populate the Header with state-derived data.
 // Call this after MakeBlock to complete the Header.
 func (h *Header) Populate(
-	version version.Consensus, chainID string,
+	version tmversion.Consensus, chainID string,
 	timestamp time.Time, lastBlockID BlockID,
 	valHash, nextValHash []byte,
 	consensusHash, appHash, lastResultsHash []byte,
@@ -507,12 +510,13 @@ func (h *Header) ToProto() *tmproto.Header {
 	if h == nil {
 		return nil
 	}
+
 	return &tmproto.Header{
-		Version:            tmversion.Consensus{Block: h.Version.App.Uint64(), App: h.Version.App.Uint64()},
+		Version:            h.Version,
 		ChainID:            h.ChainID,
 		Height:             h.Height,
 		Time:               h.Time,
-		LastBlockID:        h.LastBlockID.ToProto(),
+		LastBlockId:        h.LastBlockID.ToProto(),
 		ValidatorsHash:     h.ValidatorsHash,
 		NextValidatorsHash: h.NextValidatorsHash,
 		ConsensusHash:      h.ConsensusHash,
@@ -534,12 +538,12 @@ func HeaderFromProto(ph *tmproto.Header) (Header, error) {
 
 	h := new(Header)
 
-	bi, err := BlockIDFromProto(&ph.LastBlockID)
+	bi, err := BlockIDFromProto(&ph.LastBlockId)
 	if err != nil {
 		return Header{}, err
 	}
 
-	h.Version = version.Consensus{Block: version.Protocol(ph.Version.Block), App: version.Protocol(ph.Version.App)}
+	h.Version = ph.Version
 	h.ChainID = ph.ChainID
 	h.Height = ph.Height
 	h.Time = ph.Time
@@ -835,6 +839,7 @@ func (commit *Commit) ValidateBasic() error {
 	if commit.Round < 0 {
 		return errors.New("negative Round")
 	}
+
 	if commit.Height >= 1 {
 		if commit.BlockID.IsZero() {
 			return errors.New("commit cannot be for nil block")
@@ -849,7 +854,6 @@ func (commit *Commit) ValidateBasic() error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -1121,7 +1125,7 @@ func (data *Data) ToProto() tmproto.Data {
 	return *tp
 }
 
-// DataFromProto takes a protobud representation of Data &
+// DataFromProto takes a protobuf representation of Data &
 // returns the native type.
 func DataFromProto(dp *tmproto.Data) (Data, error) {
 	if dp == nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/crypto/tmhash"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmproto "github.com/tendermint/tendermint/proto/types"
 )
@@ -246,6 +247,7 @@ func EvidenceFromProto(evidence *tmproto.Evidence) (Evidence, error) {
 
 		return &dve, dve.ValidateBasic()
 	case *tmproto.Evidence_ConflictingHeadersEvidence:
+
 		h1, err := SignedHeaderFromProto(evi.ConflictingHeadersEvidence.H1)
 		if err != nil {
 			return nil, fmt.Errorf("from proto err: %w", err)
@@ -262,6 +264,7 @@ func EvidenceFromProto(evidence *tmproto.Evidence) (Evidence, error) {
 
 		return tp, tp.ValidateBasic()
 	case *tmproto.Evidence_LunaticValidatorEvidence:
+
 		h, err := HeaderFromProto(evi.LunaticValidatorEvidence.GetHeader())
 		if err != nil {
 			return nil, err
@@ -324,6 +327,14 @@ func RegisterEvidences(cdc *amino.Codec) {
 	cdc.RegisterConcrete(&PhantomValidatorEvidence{}, "tendermint/PhantomValidatorEvidence", nil)
 	cdc.RegisterConcrete(&LunaticValidatorEvidence{}, "tendermint/LunaticValidatorEvidence", nil)
 	cdc.RegisterConcrete(&PotentialAmnesiaEvidence{}, "tendermint/PotentialAmnesiaEvidence", nil)
+}
+
+func init() {
+	tmjson.RegisterType(&DuplicateVoteEvidence{}, "tendermint/DuplicateVoteEvidence")
+	tmjson.RegisterType(&ConflictingHeadersEvidence{}, "tendermint/ConflictingHeadersEvidence")
+	tmjson.RegisterType(&PhantomValidatorEvidence{}, "tendermint/PhantomValidatorEvidence")
+	tmjson.RegisterType(&LunaticValidatorEvidence{}, "tendermint/LunaticValidatorEvidence")
+	tmjson.RegisterType(&PotentialAmnesiaEvidence{}, "tendermint/PotentialAmnesiaEvidence")
 }
 
 func RegisterMockEvidences(cdc *amino.Codec) {
@@ -526,8 +537,6 @@ type ConflictingHeadersEvidence struct {
 	H2 *SignedHeader `json:"h_2"`
 }
 
-var _ Evidence = &ConflictingHeadersEvidence{}
-var _ CompositeEvidence = &ConflictingHeadersEvidence{}
 var _ Evidence = ConflictingHeadersEvidence{}
 var _ CompositeEvidence = ConflictingHeadersEvidence{}
 
@@ -778,7 +787,6 @@ type PhantomValidatorEvidence struct {
 	LastHeightValidatorWasInSet int64 `json:"last_height_validator_was_in_set"`
 }
 
-var _ Evidence = &PhantomValidatorEvidence{}
 var _ Evidence = PhantomValidatorEvidence{}
 
 func (e PhantomValidatorEvidence) Height() int64 {
@@ -858,7 +866,6 @@ type LunaticValidatorEvidence struct {
 	InvalidHeaderField string  `json:"invalid_header_field"`
 }
 
-var _ Evidence = &LunaticValidatorEvidence{}
 var _ Evidence = LunaticValidatorEvidence{}
 
 func (e LunaticValidatorEvidence) Height() int64 {
@@ -959,6 +966,10 @@ func (e LunaticValidatorEvidence) VerifyHeader(committedHeader *Header) error {
 		return fmt.Errorf("%s matches committed hash", field)
 	}
 
+	if committedHeader == nil {
+		return errors.New("committed header is nil")
+	}
+
 	switch e.InvalidHeaderField {
 	case ValidatorsHashField:
 		if bytes.Equal(committedHeader.ValidatorsHash, e.Header.ValidatorsHash) {
@@ -994,7 +1005,6 @@ type PotentialAmnesiaEvidence struct {
 	VoteB *Vote `json:"vote_b"`
 }
 
-var _ Evidence = &PotentialAmnesiaEvidence{}
 var _ Evidence = PotentialAmnesiaEvidence{}
 
 func (e PotentialAmnesiaEvidence) Height() int64 {
