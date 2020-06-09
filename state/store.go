@@ -257,14 +257,14 @@ func PruneStates(db dbm.DB, from int64, to int64) error {
 //------------------------------------------------------------------------
 
 // ABCIResponsesResultsHash returns the root hash of a Merkle tree with 3 leafs:
-//   1) amino encoded ResponseBeginBlock.Events
+//   1) proto encoded ResponseBeginBlock.Events
 //   2) root hash of a Merkle tree of ResponseDeliverTx responses (see ABCIResults.Hash)
-//   3) amino encoded ResponseEndBlock.Events
+//   3) proto encoded ResponseEndBlock.Events
 //
 // See merkle.SimpleHashFromByteSlices
 func ABCIResponsesResultsHash(ar *tmstate.ABCIResponses) []byte {
-	// Amino-encode BeginBlock events.
-	bbeBytes, err := cdc.MarshalBinaryLengthPrefixed(ar.BeginBlock.Events)
+	// proto-encode BeginBlock events.
+	bbeBytes, err := proto.Marshal(ar.BeginBlock.Events)
 	if err != nil {
 		panic(err)
 	}
@@ -272,8 +272,8 @@ func ABCIResponsesResultsHash(ar *tmstate.ABCIResponses) []byte {
 	// Build a Merkle tree of amino-encoded DeliverTx results and get a hash.
 	results := types.NewResults(ar.DeliverTxs)
 
-	// Amino-encode EndBlock events.
-	ebeBytes, err := cdc.MarshalBinaryLengthPrefixed(ar.EndBlock.Events)
+	// proto-encode EndBlock events.
+	ebeBytes, err := proto.Marshal(ar.EndBlock.Events)
 	if err != nil {
 		panic(err)
 	}

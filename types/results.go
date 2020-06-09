@@ -1,31 +1,13 @@
 package types
 
 import (
+	"github.com/gogo/protobuf/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/libs/bytes"
 )
 
-//-----------------------------------------------------------------------------
-
-// ABCIResult is the deterministic component of a ResponseDeliverTx.
-// TODO: add tags and other fields
-// https://github.com/tendermint/tendermint/issues/1007
-type ABCIResult struct {
-	Code      uint32         `json:"code"`
-	Data      bytes.HexBytes `json:"data"`
-	GasWanted int64          `json:"gas_wanted"`
-	GasUsed   int64          `json:"gas_used"`
-	Events    []abci.Event   `json:"events"`
-}
-
-// Bytes returns the amino encoded ABCIResult
-func (a ABCIResult) Bytes() []byte {
-	return cdcEncode(a)
-}
-
 // ABCIResults wraps the deliver tx results to return a proof
-type ABCIResults []ABCIResult
+type ABCIResults []*abci.DeterministicResponseDeliverTx
 
 // NewResults creates ABCIResults from the list of ResponseDeliverTx.
 func NewResults(responses []*abci.ResponseDeliverTx) ABCIResults {
@@ -37,23 +19,14 @@ func NewResults(responses []*abci.ResponseDeliverTx) ABCIResults {
 }
 
 // NewResultFromResponse creates ABCIResult from ResponseDeliverTx.
-func NewResultFromResponse(response *abci.ResponseDeliverTx) ABCIResult {
-	return ABCIResult{
+func NewResultFromResponse(response *abci.ResponseDeliverTx) *abci.DeterministicResponseDeliverTx {
+	return &abci.DeterministicResponseDeliverTx{
 		Code:      response.Code,
 		Data:      response.Data,
 		GasWanted: response.GasWanted,
 		GasUsed:   response.GasUsed,
 		Events:    response.Events,
 	}
-}
-
-// Bytes serializes the ABCIResponse using amino
-func (a ABCIResults) Bytes() []byte {
-	bz, err := cdc.MarshalBinaryLengthPrefixed(a)
-	if err != nil {
-		panic(err)
-	}
-	return bz
 }
 
 // Hash returns a merkle hash of all results
@@ -73,7 +46,11 @@ func (a ABCIResults) toByteSlices() [][]byte {
 	l := len(a)
 	bzs := make([][]byte, l)
 	for i := 0; i < l; i++ {
-		bzs[i] = a[i].Bytes()
+		bz, err := proto.Marshal(a[i])
+		if err != nil {
+			panic(err)
+		}
+		bzs[i] = bz
 	}
 	return bzs
 }
