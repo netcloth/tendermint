@@ -262,7 +262,7 @@ func PruneStates(db dbm.DB, from int64, to int64) error {
 //   3) amino encoded ResponseEndBlock.Events
 //
 // See merkle.SimpleHashFromByteSlices
-func ABCIResponsesResultsHash(ar tmstate.ABCIResponses) []byte {
+func ABCIResponsesResultsHash(ar *tmstate.ABCIResponses) []byte {
 	// Amino-encode BeginBlock events.
 	bbeBytes, err := cdc.MarshalBinaryLengthPrefixed(ar.BeginBlock.Events)
 	if err != nil {

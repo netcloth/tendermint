@@ -188,12 +188,12 @@ func TestABCIResponsesSaveLoad2(t *testing.T) {
 		res, err := sm.LoadABCIResponses(stateDB, h)
 		if assert.NoError(err, "%d", i) {
 			t.Log(res)
-			responses := &sm.ABCIResponses{
+			responses := &tmstate.ABCIResponses{
 				BeginBlock: &abci.ResponseBeginBlock{},
 				DeliverTxs: tc.expected,
 				EndBlock:   &abci.ResponseEndBlock{},
 			}
-			assert.Equal(responses.ResultsHash(), sm.ABCIResponsesResultsHash(*res), "%d", i)
+			assert.Equal(sm.ABCIResponsesResultsHash(responses), sm.ABCIResponsesResultsHash(res), "%d", i)
 		}
 	}
 }
