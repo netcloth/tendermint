@@ -378,19 +378,6 @@ message Snapshot {
 }
 
 //----------------------------------------
-// Misc. types
-
-// DeterministicResponseDeliverTx is the deterministic component of a ResponseDeliverTx.
-message DeterministicResponseDeliverTx {
-  uint32         code       = 1;
-  bytes          data       = 2;
-  int64          gas_wanted = 3;
-  int64          gas_used   = 4;
-  repeated Event events     = 5
-    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-}
-
-//----------------------------------------
 // Service Definition
 
 service ABCIApplication {

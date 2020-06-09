@@ -264,7 +264,9 @@ func PruneStates(db dbm.DB, from int64, to int64) error {
 // See merkle.SimpleHashFromByteSlices
 func ABCIResponsesResultsHash(ar *tmstate.ABCIResponses) []byte {
 	// proto-encode BeginBlock events.
-	bbeBytes, err := proto.Marshal(ar.BeginBlock.Events)
+	bbeBytes, err := proto.Marshal(&abci.ResponseBeginBlock{
+		Events: ar.BeginBlock.Events,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -273,7 +275,9 @@ func ABCIResponsesResultsHash(ar *tmstate.ABCIResponses) []byte {
 	results := types.NewResults(ar.DeliverTxs)
 
 	// proto-encode EndBlock events.
-	ebeBytes, err := proto.Marshal(ar.EndBlock.Events)
+	ebeBytes, err := proto.Marshal(&abci.ResponseEndBlock{
+		Events: ar.EndBlock.Events,
+	})
 	if err != nil {
 		panic(err)
 	}
