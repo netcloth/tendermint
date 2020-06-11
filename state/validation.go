@@ -20,12 +20,18 @@ func validateBlock(evidencePool EvidencePool, stateDB dbm.DB, state State, block
 	}
 
 	// Validate basic info.
-	if block.Version != state.Version.Consensus {
+	if block.Version.Block != state.Version.Consensus.Block {
 		return fmt.Errorf("Wrong Block.Header.Version. Expected %v, got %v",
 			state.Version.Consensus,
 			block.Version,
 		)
 	}
+	//if block.Version != state.Version.Consensus {
+	//	return fmt.Errorf("Wrong Block.Header.Version. Expected %v, got %v",
+	//		state.Version.Consensus,
+	//		block.Version,
+	//	)
+	//}
 	if block.ChainID != state.ChainID {
 		return fmt.Errorf("Wrong Block.Header.ChainID. Expected %v, got %v",
 			state.ChainID,
